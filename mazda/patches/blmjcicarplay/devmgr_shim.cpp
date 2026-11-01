@@ -47,6 +47,8 @@ pfn4  g_real_startnavi = nullptr;
 void *g_devmgr_handle = nullptr;
 pthread_mutex_t g_mu        = PTHREAD_MUTEX_INITIALIZER;
 bool            g_navi_armed = false;
+bool            g_retry_thread_up = false;   // [RECONNECT] one retry thread per process, not per session
+unsigned        g_session_gen = 0;           // [RECONNECT] bumped on every SessionDeactive (debug logs)
 volatile int    g_armed      = 0;   // set once a live CarPlay session has armed nav; gates the passive msgrcv tap (no tapping until a nav session is up)
 void *g_procH = nullptr;
 void *g_devH  = nullptr;
@@ -152,6 +154,15 @@ void cp_deactive_cb(void *a0, void *a1, void *a2, void *a3)
     (void)a0; (void)a1; (void)a2; (void)a3;
     LOGD("carplay SessionDeactive (session ended)");
     hud_request_fullclear();   // CarPlay session gone (e.g. phone unplugged) -> FULL wipe incl sign (like AA teardown)
+    // [RECONNECT] Upstream set g_navi_armed once per process, so a CarPlay reconnect (same
+    // jciCARPLAY process) never re-ran the arm path: no fresh StartNaviRouteGuidence on the new
+    // session, only the background retry with whatever handles it had. Clear it here so the next
+    // session's first devmgr call (CallState/CommUpdates/SendLocation) re-arms nav immediately.
+    // Atomic stores, not g_mu: arm_navi holds g_mu across the OEM StartNavi call, and this runs on
+    // the HMI worker thread, so taking the lock here could stall that thread behind the OEM call.
+    __atomic_store_n(&g_navi_armed, false, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&g_session_gen, 1u, __ATOMIC_SEQ_CST);
+    LOGD("reconnect: nav disarmed, waiting for next session (gen=%u)", g_session_gen);
 }
 
 void *cp_resolve(const char *name)
@@ -211,10 +222,15 @@ void arm_navi(const char *from, void *procH, void *devH)
         carplay_status_start();   // [NAV-END] subscribe OEM CarPlay TBT-status (debug: LOGD only)
         if (g_real_startnavi) {
             int rc = g_real_startnavi(procH, devH, (void *)0, (void *)0);
-            LOGD("StartNaviRouteGuidence rc=%d; spawning retry+watch", rc);
-            pthread_t th;
-            if (pthread_create(&th, nullptr, navi_retry_thread, nullptr) == 0)
-                pthread_detach(th);
+            LOGD("StartNaviRouteGuidence rc=%d (session gen=%u)", rc, g_session_gen);
+            if (!g_retry_thread_up) {
+                pthread_t th;
+                if (pthread_create(&th, nullptr, navi_retry_thread, nullptr) == 0) {
+                    pthread_detach(th);
+                    g_retry_thread_up = true;
+                    LOGD("spawned StartNavi retry+watch thread");
+                }
+            }
         } else { LOGE("arm_navi: StartNavi unresolved"); g_navi_armed = false; }
     }
     pthread_mutex_unlock(&g_mu);
@@ -266,6 +282,14 @@ void msg_tap(int msqid, const void *msgp, long n)
 #endif
     // Only big messages: maneuver=0x348, guidance=0x640. Skips chatty small msgs.
     if (n < 0x300 || !msgp) return;
+    {
+        // [RECONNECT diag] Debug build only (LOGD compiles out in release): count nav messages so the
+        // log shows whether the phone is still streaming guidance after a CarPlay reconnect.
+        static unsigned s_big = 0;
+        if ((++s_big % 25u) == 1u)
+            LOGD("tap: %u big msgs so far (last mt=0x%04x n=0x%lx, session gen=%u)",
+                 s_big, (unsigned)((*(const uint32_t *)msgp) & 0xffff), n, g_session_gen);
+    }
     // Decode maneuver -> HUD (passive read of the received buffer). The shipped
     // build does NO disk logging here: the BUILD-2b probe that appended every nav
     // payload to /data_persist/nav_msgrcv.log + nav_probe_MANEUVER_SEEN.txt was

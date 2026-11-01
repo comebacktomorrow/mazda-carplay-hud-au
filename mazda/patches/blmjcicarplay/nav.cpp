@@ -52,6 +52,12 @@
 
 #include "patch.h"
 #include "hud/hud_send.h"
+#include "distance_round.h"
+
+// [ROUNDING] 1 = round the HUD distance like the CarPlay banner (distance_round.h); 0 = raw metres.
+#ifndef CARPLAY_ROUND_DISTANCE
+#define CARPLAY_ROUND_DISTANCE 1
+#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -399,10 +405,16 @@ extern "C" void nav_on_devmgr_msg(const void *msgp, long n)
         if (n >= kGuidanceDistOff + 4) {
             int32_t dist = (int32_t)(*reinterpret_cast<const uint32_t *>(b + kGuidanceDistOff));
             if (dist > 0 && dist <= 100000) {
+#if CARPLAY_ROUND_DISTANCE
+                // [ROUNDING] Read the distance the way the CarPlay banner does (see distance_round.h).
+                RoundedDistance rd = carplay_round_distance(dist);
+                hud_on_distance(dist, /*time_until*/0, rd.disp, rd.unit);
+#else
                 int32_t  disp; uint32_t unit;
                 if (dist < 1000) { unit = 1; disp = dist * 1000; }  // meters
                 else             { unit = 3; disp = dist;        }  // km
                 hud_on_distance(dist, /*time_until*/0, disp, unit);
+#endif
             }
         }
     }

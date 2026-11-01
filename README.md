@@ -19,6 +19,18 @@ arrow, distance, road name — to the OEM navigation HUD D-Bus API.
 - Supported: Mazda Connect **CMU150**, FW **74.00.324** (CX-5 KF, CX-8 2018 and
   same-platform units); wired and wireless CarPlay (WCP).
 
+
+## Changes in this fork (comebacktomorrow)
+
+Built on [AmbrosiaAS/mazda-carplay-hud-au](https://github.com/AmbrosiaAS/mazda-carplay-hud-au) (Australian
+left-hand-traffic icons). Tested on a 2014 Mazda 3 (BM, AU) with a monochrome combiner HUD on FW **74.00.333A**.
+
+- **Distance rounding like the CarPlay banner** (`distance_round.h`): 5 m steps under 100 m, 50 m steps to
+  500 m, 100 m steps to 1 km, 0.1 km to 10 km, whole km above. Set `-DCARPLAY_ROUND_DISTANCE=0` for raw metres.
+- **CarPlay reconnect** (`devmgr_shim.cpp`): nav is re-armed on every new CarPlay session instead of once per
+  boot, so directions should come back after the phone drops and reconnects.
+- **CI build**: every push builds release + debug `.so` files with GitHub Actions (Actions tab → artifact).
+
 ## Repository layout
 ```
 mazda/

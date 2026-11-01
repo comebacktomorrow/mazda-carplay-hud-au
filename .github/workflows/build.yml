@@ -1,0 +1,66 @@
+name: build
+
+# Cross-compiles the shim on every push (and on demand) and uploads the release and
+# debug .so files as a downloadable artifact. Adapted from ibm0078/mazda-carplay-hud.
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    # 22.04 on purpose: m3-toolchain is a prebuilt crosstool-NG compiler from the
+    # Ubuntu 14.10 era and newer runner images keep dropping the runtime it expects.
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Host unit tests (distance rounding)
+        run: |
+          g++ -std=c++11 -Wall -Wextra -Werror -I mazda/patches/blmjcicarplay \
+              tests/distance_round_test.cpp -o /tmp/distance_round_test
+          /tmp/distance_round_test
+
+      - name: Fetch the ARM cross-compiler
+        # Cloned explicitly rather than as a submodule so a failure is loud.
+        run: |
+          rm -rf mazda/m3-toolchain
+          git clone --depth 1 https://github.com/lmagder/m3-toolchain mazda/m3-toolchain
+          chmod -R +x mazda/m3-toolchain/bin mazda/m3-toolchain/libexec || true
+
+      - name: Install 32-bit runtime if the toolchain is i386
+        run: |
+          if file mazda/m3-toolchain/bin/arm-cortexa9_neon-linux-gnueabi-g++ | grep -q 'ELF 32-bit'; then
+            sudo dpkg --add-architecture i386
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libc6:i386 libstdc++6:i386 zlib1g:i386
+          fi
+
+      - name: Compiler version
+        run: mazda/m3-toolchain/bin/arm-cortexa9_neon-linux-gnueabi-g++ --version
+
+      - name: Build release
+        run: make -C mazda release
+
+      - name: Build debug
+        # Unstripped, verbose build that logs to /tmp/carplay_bridge.log on the car.
+        run: make -C mazda debug
+
+      - name: Check outputs
+        run: |
+          file mazda/build/release/libpatch-blmjcicarplay.so mazda/build/debug/libpatch-blmjcicarplay.so
+          md5sum mazda/build/release/libpatch-blmjcicarplay.so mazda/build/debug/libpatch-blmjcicarplay.so | tee mazda/build/MD5SUMS
+          # Ship gate from upstream: no diagnostic payload logging in release.
+          ! strings mazda/build/release/libpatch-blmjcicarplay.so | grep -q nav_diag
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: libpatch-blmjcicarplay
+          path: |
+            mazda/build/release/libpatch-blmjcicarplay.so
+            mazda/build/debug/libpatch-blmjcicarplay.so
+            mazda/build/MD5SUMS
+          if-no-files-found: error
