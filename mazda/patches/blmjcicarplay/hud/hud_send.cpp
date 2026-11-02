@@ -298,7 +298,17 @@ uint8_t roundabout_icon(int32_t degrees, int32_t side_index_lr)
     // Verified LIVE on the HUD via /tmp/hudtest (RHT bank 37..48): straight(0)->icon43=UP,
     // right(+90)->icon40=RIGHT, left(270)->icon46=LEFT, behind(180)->icon37=DOWN.
     // (d+15)/30 rounds to nearest 30°; %12 wraps [345,360) back to sector 0.
-    int32_t d = (180 - degrees) % 360;
+    //
+    // [AU-RA-MIRROR] The left-hand-traffic bank (49..60) is the mirror image of the RHT bank:
+    // its sector index runs CLOCKWISE. Feeding it 180 - bearing (as for RHT) swapped left and
+    // right exits on an AU car (road-tested: left exits drew as right and vice versa), so the
+    // LHT bank gets 180 + bearing. Straight (0) and behind (180) land on the same sectors either
+    // way. Build with -DCARPLAY_LHT_RA_MIRROR=0 to restore the old behaviour.
+#ifndef CARPLAY_LHT_RA_MIRROR
+#define CARPLAY_LHT_RA_MIRROR 1
+#endif
+    int32_t d = (CARPLAY_LHT_RA_MIRROR && side_index_lr == 0) ? (180 + degrees) % 360
+                                                              : (180 - degrees) % 360;
     if (d < 0) d += 360;
     uint8_t nearest = static_cast<uint8_t>(((d + 15) / 30) % 12);
     uint8_t offset  = (side_index_lr == 0) ? 49 : 37;
