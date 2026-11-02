@@ -10,9 +10,12 @@
 // Bands (metric), round-half-up to the nearest step:
 //   >= 10 km          whole km            12.4 km -> 12 km
 //   1 km .. < 10 km   0.1 km              1.26 km -> 1.3 km
-//   500 m .. < 1 km   100 m               640 m   -> 600 m
-//   100 m .. < 500 m  50 m                130 m   -> 150 m
-//   < 100 m           5 m                 13 m    -> 15 m, 2 m -> 0 m (shown as "now")
+//   300 m .. < 1 km   100 m               640 m   -> 600 m
+//   100 m .. < 300 m  50 m                260 m   -> 250 m
+//   30 m .. < 100 m   10 m                64 m    -> 60 m
+//   < 30 m            5 m                 13 m    -> 15 m, 2 m -> 0 m (shown as "now")
+// (Bands observed on the CarPlay banner in an AU car: 100 m steps down to 300, 250 then 50 m steps
+// down to 100, 10 m steps down to 30, then 5 m.)
 // A value that rounds up across a band edge is re-expressed in the larger unit
 // (e.g. 960 m -> 1000 m -> "1.0 km"), matching how the CarPlay banner switches over.
 //
@@ -30,13 +33,16 @@
 #define CARPLAY_ROUND_KM_FROM       1000    // metres: at/above this, km with one decimal
 #endif
 #ifndef CARPLAY_ROUND_100_FROM
-#define CARPLAY_ROUND_100_FROM      500     // metres: at/above this, 100 m steps
+#define CARPLAY_ROUND_100_FROM      300     // metres: at/above this, 100 m steps
 #endif
 #ifndef CARPLAY_ROUND_50_FROM
 #define CARPLAY_ROUND_50_FROM       100     // metres: at/above this, 50 m steps
 #endif
+#ifndef CARPLAY_ROUND_10_FROM
+#define CARPLAY_ROUND_10_FROM       30      // metres: at/above this, 10 m steps
+#endif
 #ifndef CARPLAY_ROUND_SMALL_STEP
-#define CARPLAY_ROUND_SMALL_STEP    5       // metres: step below CARPLAY_ROUND_50_FROM
+#define CARPLAY_ROUND_SMALL_STEP    5       // metres: step below CARPLAY_ROUND_10_FROM
 #endif
 
 // Unit codes are the proto DISPLAY_DISTANCE_UNIT values hud_on_distance() expects:
@@ -61,6 +67,7 @@ static inline RoundedDistance carplay_round_distance(int32_t meters)
     else if (meters >= CARPLAY_ROUND_KM_FROM)       m = round_to_step(meters, 100);
     else if (meters >= CARPLAY_ROUND_100_FROM)      m = round_to_step(meters, 100);
     else if (meters >= CARPLAY_ROUND_50_FROM)       m = round_to_step(meters, 50);
+    else if (meters >= CARPLAY_ROUND_10_FROM)       m = round_to_step(meters, 10);
     else                                            m = round_to_step(meters, CARPLAY_ROUND_SMALL_STEP);
 
     if (m >= CARPLAY_ROUND_KM_FROM) {

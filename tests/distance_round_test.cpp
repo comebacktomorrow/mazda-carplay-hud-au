@@ -14,23 +14,31 @@ static void expect(int32_t in, int32_t disp, uint32_t unit)
 
 int main()
 {
-    // < 100 m: 5 m steps
+    // < 30 m: 5 m steps
     expect(2,     0,       1);
     expect(3,     5000,    1);
     expect(13,    15000,   1);
     expect(12,    10000,   1);
-    expect(97,    95000,   1);
-    expect(98,    100000,  1);   // rounds up into the 50 m band value 100
-    // 100..499 m: 50 m steps
+    expect(27,    25000,   1);
+    expect(29,    30000,   1);
+    // 30..99 m: 10 m steps
+    expect(30,    30000,   1);
+    expect(34,    30000,   1);
+    expect(35,    40000,   1);
+    expect(64,    60000,   1);
+    expect(94,    90000,   1);
+    expect(95,    100000,  1);   // rounds up to 100
+    // 100..299 m: 50 m steps
     expect(100,   100000,  1);
     expect(124,   100000,  1);
     expect(125,   150000,  1);
-    expect(130,   150000,  1);
-    expect(474,   450000,  1);
-    expect(475,   500000,  1);
-    // 500..999 m: 100 m steps
-    expect(549,   500000,  1);
-    expect(550,   600000,  1);
+    expect(260,   250000,  1);
+    expect(274,   250000,  1);
+    expect(275,   300000,  1);
+    // 300..999 m: 100 m steps
+    expect(300,   300000,  1);
+    expect(349,   300000,  1);
+    expect(350,   400000,  1);
     expect(640,   600000,  1);
     expect(949,   900000,  1);
     expect(950,   1000,    3);   // 1000 m -> shown as 1.0 km
